@@ -1,0 +1,19 @@
+GENERAL APPROACH:
+- each tlmgr package becomes texlive-$pkgname
+- .ARCH prefixes are renamed to -bin (so dependencies don't mention .ARCH)
+  .infra is renamed to -infra
+- we build texlive from source tarball
+  - and package all binaries as subpkgs texlive-$subpkg-bin
+  - all symlink-only .ARCH packages reside in texlive, which provides= them
+- other binaries are repacked, as well as all non-binary packages
+
+UPDATING:
+- run update.sh to fetch from a CTAN mirror
+- if needed:
+	- adjust subpkgs for all binary packages we build yourself
+	- run gen-subpkgs.sh > ~/xbps-packages/srcpkgs/texlive/subpkgs
+	- run gen-provides.sh > ~/xbps-packages/srcpkgs/texlive/provides
+	- run generated mklinks.sh in ~/xbps-packages/srcpkgs
+	- build texlive package
+- run findmissing.sh to see which pkgs will be built
+- run buildmissing.sh to build them
