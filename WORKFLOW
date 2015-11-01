@@ -15,5 +15,6 @@ UPDATING:
 	- run gen-provides.sh > ~/xbps-packages/srcpkgs/texlive/provides
 	- run generated mklinks.sh in ~/xbps-packages/srcpkgs
 	- build texlive package
-- run findmissing.sh to see which pkgs will be built
+- optional:
+	- run findmissing.sh to see which pkgs will be built
 - run buildmissing.sh to build them
