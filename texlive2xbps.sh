@@ -15,21 +15,6 @@ mkdir -p $TEXMF
 cd $TEXMF
 tar xvf "$archive"
 
-arch=$(sed -n '/^binfiles/s/^binfiles arch=\([^ ]*\).*/\1/p' tlpkg/tlpobj/*.tlpobj)
-pkgname=$(sed -n '/^name/{s/^[^ ]* //;s/\.infra/-infra/;p}' tlpkg/tlpobj/*.tlpobj)
-case "$pkgname" in
-	*.$arch) pkgname=${pkgname%.$arch}-bin ;;
-esac
-license=$(sed -n '/^catalogue-license/{s/^[^ ]* //;y/abcdefghijklmnopqrstuvwxyz/ABCDEFGHIJKLMNOPQRSTUVWXYZ/;p}' tlpkg/tlpobj/*.tlpobj)
-revision=$(sed -n '/^revision/s/^[^ ]* //p' tlpkg/tlpobj/*.tlpobj)
-version=$(sed -n '/^catalogue-version/{s/^[^ ]* //;s/^\.//;s/[ -]//g;p}' tlpkg/tlpobj/*.tlpobj)
-pkgver="${YEAR}.${revision}${version:+.}${version}"
-homepage="https://www.ctan.org/tex-archive$(sed -n '/^catalogue-ctan/s/^[^ ]* //p' tlpkg/tlpobj/*.tlpobj)"
-desc=$(sed -n '/^shortdesc/s/^[^ ]* //p' tlpkg/tlpobj/*.tlpobj)
-: ${desc:=TexLive $pkgname package}
-dependencies=$(sed -n '/^depend/{s/^[^ ]* /texlive-/;s/\.ARCH$/-bin/;/\.infra/d;s/$/>'=$YEAR'/;p}' tlpkg/tlpobj/*.tlpobj | tr '\n' ' ')
-dependencies+=" texlive>=${YEAR}"
-
 if [ -d bin ]; then
 	mkdir -p $tmpdir/usr/bin
 	for f in bin/*/*; do
@@ -37,17 +22,8 @@ if [ -d bin ]; then
 	done
 fi
 
-case "$arch" in
-	i386-linux) arch=i686;;
-	*-linux) arch=${arch%-linux};;
-	'') arch=noarch;;
-	*) echo "What should i do with arch $arch?"; exit 1;;
-esac
-
 [ -d texmf-dist ] && mv texmf-dist/* .
 
-rm -rf tlpkg/tlpobj
-rmdir tlpkg || true
 if [ -d tlpkg ]; then
 	mv tlpkg ..
 fi
@@ -56,15 +32,53 @@ popd
 mkdir -p binpkgs
 cd binpkgs
 
-xbps-create \
-	-A "$arch" \
-	-B texlive2xbps \
-	-D "$dependencies" \
-	-H "$homepage" \
-	-l "$license" \
-	-m "texlive2xbps <texlive2xbps@voidlinux.eu>" \
-	-n "texlive-${pkgname}-${pkgver}_1" \
-	-s "$desc" \
-	"$tmpdir"
+awk -v year=$YEAR -v tmpdir=$tmpdir <$tmpdir/$TEXMF/../tlpkg/tlpobj/*.tlpobj '
+function q(s) {
+	gsub("\047", "\047\\\047\047", s)
+	return "\047" s "\047"
+}
+BEGIN {
+	arch = "noarch"
+	depends = "texlive>=" year
+	homepage = "https://www.tug.org/texlive/"
+}
+$1 == "binfiles" {
+	arch = $2  
+	sub("arch=", "", arch)
+	sub("\\." arch, "-bin", pkgname)
+}
+$1 == "name" {
+	pkgname = $2
+	sub("\\.infra", "-infra", pkgname)
+}
+$1 == "catalogue-license" { license = toupper($2) }
+$1 == "revision" { revision = $2 }
+$1 == "catalogue-version" { version = $2; gsub("^\\.|[ -]", "", version) }
+$1 == "catalogue-ctan" { homepage = "https://www.ctan.org/tex-archive" $2 }
+$1 == "shortdesc" { desc = $0; sub("^shortdesc *", "", desc) }
+$1 == "depend" {
+	dep = "$2"
+	sub("\\.infra", "-infra", dep)
+	sub("\\." arch, "-bin", dep)
+	depends = depends " " dep ">=" year
+}
+
+END {
+	pkgver = year "." revision (version ? "." version : "")
+	if (!desc) desc = "TeXLive " pkgname " package"
+	if (arch == "i386-linux") arch="i686"
+	sub("-linux$", "", arch)
+
+	system("xbps-create "\
+	"-A "q(arch)" "\
+	"-B texlive2xbps "\
+	"-D "q(depends)" "\
+	"-H "q(homepage)" "\
+	"-l "q(license)" "\
+	"-m \"texlive2xbps <texlive2xbps@voidlinux.eu>\" "\
+	"-n texlive-"q(pkgname)"-"q(pkgver)"_1 "\
+	"-s "q(desc)" "\
+	tmpdir)
+}'
 
 rm -rf "$tmpdir"
